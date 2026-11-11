@@ -28,6 +28,29 @@ vectorstore=Chroma(persist_directory=DB_NAME, embedding_function=embeddings)
 retriever=vectorstore.as_retriever()
 llm=ChatOpenAI(model=MODEL, temperature=0)
 
+def content_to_str(content) -> str:
+    """Gradio 6 chat messages may use multipart content (list of dicts), not plain strings."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if text:
+                    parts.append(str(text))
+        return "\n".join(parts)
+    return "" if content is None else str(content)
+
+def normalize_history(history: list[dict]) -> list[dict]:
+    return [
+        {"role": m["role"], "content": content_to_str(m.get("content"))}
+        for m in history
+    ]
+
+
 def fetch_context(question: str)->list[Document]:
     """
     Fetch the context documents for the given question.
@@ -50,6 +73,7 @@ def answer_question(question: str, history: list[dict]=[]) -> tuple[str, list[Do
     """
     Answer the given question with RAG; return the answer and the context documents.
     """
+    history=normalize_history(history)
     combined=combined_question(question, history)
     docs=fetch_context(combined)
     context="\n\n".join(doc.page_content for doc in docs)
